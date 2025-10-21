@@ -1,6 +1,26 @@
 import './bootstrap';
 import Alpine from 'alpinejs';
 
+// Motion preference utilities
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+const setMotionClass = (matches) => {
+    document.documentElement.classList.toggle('reduce-motion', matches);
+};
+
+setMotionClass(motionQuery.matches);
+
+const handleMotionChange = (event) => setMotionClass(event.matches);
+
+if (typeof motionQuery.addEventListener === 'function') {
+    motionQuery.addEventListener('change', handleMotionChange);
+} else if (typeof motionQuery.addListener === 'function') {
+    motionQuery.addListener(handleMotionChange);
+}
+
+window.shouldReduceMotion = () => document.documentElement.classList.contains('reduce-motion');
+window.prefersReducedMotionQuery = motionQuery;
+
 // Make Alpine available globally
 window.Alpine = Alpine;
 
@@ -17,7 +37,7 @@ Alpine.start();
 document.addEventListener('DOMContentLoaded', () => {
     // Lazy load images using Intersection Observer
     const lazyImages = document.querySelectorAll('img.lazy, img[loading="lazy"]');
-    
+
     if ('IntersectionObserver' in window) {
         const imageObserver = new IntersectionObserver((entries, observer) => {
             entries.forEach(entry => {
@@ -54,18 +74,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Page Transitions and Animations
 document.addEventListener('DOMContentLoaded', () => {
+    const reduceMotion = window.shouldReduceMotion();
+
     // Add fade-in animation to main content
     const mainContent = document.querySelector('main');
-    if (mainContent) {
+    if (mainContent && !reduceMotion) {
         mainContent.classList.add('animate-fade-in');
     }
 
     // Add staggered fade-in to cards
-    const cards = document.querySelectorAll('.card, .card-hover, article');
-    cards.forEach((card, index) => {
-        card.style.animationDelay = `${index * 0.1}s`;
-        card.classList.add('animate-fade-in-up');
-    });
+    if (!reduceMotion) {
+        const cards = document.querySelectorAll('.card, .card-hover, article');
+        cards.forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+            card.classList.add('animate-fade-in-up');
+        });
+    }
 
     // Smooth scroll for anchor links
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
@@ -76,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const target = document.querySelector(href);
                 if (target) {
                     target.scrollIntoView({
-                        behavior: 'smooth',
+                        behavior: reduceMotion ? 'auto' : 'smooth',
                         block: 'start'
                     });
                 }
@@ -120,29 +144,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Intersection Observer for scroll animations
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    };
+    if (!reduceMotion) {
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
 
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('animate-fade-in-up');
-                observer.unobserve(entry.target);
-            }
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('animate-fade-in-up');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+
+        // Observe sections for scroll animations
+        const sections = document.querySelectorAll('section');
+        sections.forEach(section => {
+            observer.observe(section);
         });
-    }, observerOptions);
-
-    // Observe sections for scroll animations
-    const sections = document.querySelectorAll('section');
-    sections.forEach(section => {
-        observer.observe(section);
-    });
+    }
 
     // Add ripple effect to buttons
     document.querySelectorAll('.btn, .btn-primary, .btn-secondary, .btn-outline').forEach(button => {
         button.addEventListener('click', function(e) {
+            if (window.shouldReduceMotion()) {
+                return;
+            }
             const ripple = document.createElement('span');
             const rect = this.getBoundingClientRect();
             const size = Math.max(rect.width, rect.height);
@@ -163,8 +192,99 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// Testimonial slider component
+window.testimonialSlider = function() {
+    return {
+        active: 0,
+        testimonials: [
+            {
+                quote: 'HEAC guided our Sukuk programme from concept to certification with exceptional governance and responsiveness.',
+                name: 'Ayesha Rahman',
+                role: 'Chief Compliance Officer, Unity Islamic',
+                client: 'Unity Islamic',
+                sector: 'Capital Markets'
+            },
+            {
+                quote: 'Their scholars translated complex fintech use-cases into practical Shariah frameworks that regulators approved quickly.',
+                name: 'Fahad Al-Mutairi',
+                role: 'Founder & CEO, HalalPay',
+                client: 'HalalPay',
+                sector: 'Fintech'
+            },
+            {
+                quote: 'From Zakat governance to executive training, HEAC has become a trusted partner across our global subsidiaries.',
+                name: 'Dr. Sara Lim',
+                role: 'Group Head of Ethics, Crescent Holdings',
+                client: 'Crescent Holdings',
+                sector: 'Corporate'
+            }
+        ],
+        interval: null,
+        prefersReduced: window.shouldReduceMotion(),
+        init() {
+            const query = window.prefersReducedMotionQuery;
+            const updatePreference = (event) => {
+                this.prefersReduced = event.matches;
+                if (this.prefersReduced) {
+                    this.stop();
+                } else {
+                    this.start();
+                }
+            };
+
+            if (query) {
+                if (typeof query.addEventListener === 'function') {
+                    query.addEventListener('change', updatePreference);
+                } else if (typeof query.addListener === 'function') {
+                    query.addListener(updatePreference);
+                }
+            }
+
+            if (!this.prefersReduced) {
+                this.start();
+            }
+        },
+        start() {
+            if (this.prefersReduced) {
+                return;
+            }
+            this.stop();
+            this.interval = setInterval(() => {
+                this.next(false);
+            }, 7000);
+        },
+        stop() {
+            if (this.interval) {
+                clearInterval(this.interval);
+                this.interval = null;
+            }
+        },
+        next(restart = true) {
+            this.active = (this.active + 1) % this.testimonials.length;
+            if (restart && !this.prefersReduced) {
+                this.start();
+            }
+        },
+        prev() {
+            this.active = (this.active - 1 + this.testimonials.length) % this.testimonials.length;
+            if (!this.prefersReduced) {
+                this.start();
+            }
+        },
+        goTo(index) {
+            this.active = index;
+            if (!this.prefersReduced) {
+                this.start();
+            }
+        }
+    };
+};
+
 // Add loading indicator for page navigation
 window.addEventListener('beforeunload', () => {
+    if (window.shouldReduceMotion()) {
+        return;
+    }
     const loader = document.createElement('div');
     loader.className = 'fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center';
     loader.innerHTML = `
